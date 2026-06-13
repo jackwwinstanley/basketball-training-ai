@@ -1,4 +1,4 @@
-# 🏀 NoDaysOff — AI Basketball Training Platform
+# NoDaysOff — AI Basketball Training Platform
 
 A full-stack web application that generates personalized basketball 
 practice plans using AI, with embedded video demonstrations for every drill.
@@ -32,7 +32,7 @@ practice plans using AI, with embedded video demonstrations for every drill.
 | AI | Anthropic Claude API |
 | Frontend | HTML, CSS, Vanilla JavaScript |
 | Server | Gunicorn + Nginx |
-| Hosting | AWS EC2 (t2.micro) |
+| Hosting | AWS EC2 (t3.micro) |
 | SSL | Let's Encrypt |
 
 ---
@@ -85,4 +85,4 @@ Deployed on AWS EC2 (Ubuntu 24.04, t3.micro) with:
 ## Author
 
 Jack Winstanley — Computer Engineering, University of Waterloo  
-AWS Certified Cloud Practitioner (CLF-C02)# basketball-training-ai
+AWS Certified Cloud Practitioner (CLF-C02)
