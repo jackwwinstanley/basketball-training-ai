@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hoop IQ — AI Training Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f1117;
+      color: #f0ede6;
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 220px;
+      min-height: 100vh;
+      background: #161a24;
+      border-right: 1px solid #2a2f45;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+    }
+    .logo-area { padding: 24px 20px 20px; border-bottom: 1px solid #2a2f45; }
+    .logo-label { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #f0ede6; }
+    .logo-sub { font-size: 11px; color: #8892a4; margin-top: 2px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .nav { padding: 16px 12px; flex: 1; }
+    .nav-section { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #8892a4; padding: 0 8px; margin: 16px 0 6px; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; color: #8892a4; transition: background 0.15s, color 0.15s; text-decoration: none; }
+    .nav-item:hover { background: #1e2332; color: #f0ede6; }
+    .nav-item.active { background: #c8883a; color: #fff; }
+    .nav-item.active i { color: #fff; }
+    .nav-item i { font-size: 18px; }
+    .sidebar-footer { padding: 16px 12px; border-top: 1px solid #2a2f45; }
+
+    /* ── Main ── */
+    .main { margin-left: 220px; flex: 1; padding: 32px 32px 48px; display: flex; flex-direction: column; gap: 24px; min-height: 100vh; }
+
+    /* ── Top bar ── */
+    .top-bar { display: flex; align-items: flex-start; justify-content: space-between; }
+    .page-title { font-family: 'Barlow Condensed', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: #f0ede6; }
+    .page-sub { font-size: 13px; color: #8892a4; margin-top: 3px; }
+    .btn-primary { background: #c8883a; color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-family: 'Inter', sans-serif; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .btn-primary:hover { background: #b57830; }
+
+    /* ── Stat cards ── */
+    .stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .stat-card { background: #161a24; border: 1px solid #2a2f45; border-radius: 12px; padding: 16px 18px; position: relative; overflow: hidden; }
+    .stat-accent { position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: #c8883a; }
+    .stat-label { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: #8892a4; }
+    .stat-value { font-family: 'Barlow Condensed', sans-serif; font-size: 38px; font-weight: 700; color: #f0ede6; line-height: 1; margin: 6px 0 2px; }
+    .stat-unit { font-size: 18px; font-weight: 400; color: #8892a4; }
+    .stat-delta { font-size: 12px; color: #639922; display: flex; align-items: center; gap: 3px; }
+    .stat-delta i { font-size: 13px; }
+
+    /* ── Middle row ── */
+    .middle-row { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+
+    /* ── Cards ── */
+    .card { background: #161a24; border: 1px solid #2a2f45; border-radius: 12px; padding: 24px; }
+    .card-title { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #f0ede6; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+    .card-title i { font-size: 18px; color: #c8883a; }
+
+    /* ── Form ── */
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: #8892a4; }
+    .form-group input, .form-group select, .form-group textarea {
+      background: #0f1117; border: 1px solid #2a2f45; border-radius: 8px; color: #f0ede6;
+      font-size: 13px; font-family: 'Inter', sans-serif; padding: 9px 12px; width: 100%; outline: none; transition: border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #c8883a; }
+    .form-group select option { background: #161a24; }
+    .form-group textarea { resize: none; height: 70px; }
+    .time-input-wrap { position: relative; }
+    .time-input-wrap input { padding-right: 44px; }
+    .time-suffix { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #8892a4; pointer-events: none; }
+
+    .generate-btn { width: 100%; background: #c8883a; color: #fff; border: none; padding: 11px; border-radius: 8px; font-size: 15px; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.15s; }
+    .generate-btn:hover { background: #b57830; }
+    .generate-btn i { font-size: 16px; }
+
+    /* ── Tips ── */
+    .tips-card { display: flex; flex-direction: column; gap: 16px; }
+    .tip-item { display: flex; gap: 12px; align-items: flex-start; }
+    .tip-icon { width: 34px; height: 34px; border-radius: 8px; background: #1e2332; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .tip-icon i { font-size: 17px; color: #c8883a; }
+    .tip-title { font-size: 13px; font-weight: 500; color: #f0ede6; margin-bottom: 3px; }
+    .tip-text { font-size: 12px; color: #8892a4; line-height: 1.5; }
+
+    /* ── Court banner ── */
+    .court-banner { background: #161a24; border: 1px solid #2a2f45; border-radius: 12px; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; position: relative; overflow: hidden; }
+    .court-svg { position: absolute; right: -10px; top: 50%; transform: translateY(-50%); opacity: 0.05; pointer-events: none; }
+    .banner-left { position: relative; z-index: 1; }
+    .banner-title { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #f0ede6; }
+    .banner-sub { font-size: 13px; color: #8892a4; margin-top: 3px; }
+    .skill-pills { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .pill { padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; background: #1e2332; color: #8892a4; border: 1px solid #2a2f45; cursor: pointer; transition: all 0.15s; }
+    .pill:hover, .pill.active { background: #c8883a; color: #fff; border-color: #c8883a; }
+
+    /* ── Loading ── */
+    .loading-state { display: none; align-items: center; gap: 10px; color: #8892a4; font-size: 14px; margin-top: 10px; }
+    .spinner { width: 16px; height: 16px; border: 2px solid #2a2f45; border-top-color: #c8883a; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Plan output ── */
+    .plan-card { background: #161a24; border: 1px solid #c8883a; border-radius: 12px; overflow: hidden; animation: fadeIn 0.35s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .plan-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #2a2f45; background: #1a1e2a; }
+    .plan-header-left { display: flex; align-items: center; gap: 12px; }
+    .plan-header-icon { width: 40px; height: 40px; background: #c8883a; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .plan-header-icon i { font-size: 20px; color: #fff; }
+    .plan-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #f0ede6; }
+    .plan-meta { font-size: 12px; color: #8892a4; margin-top: 2px; }
+
+    .plan-progress-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+    .plan-progress-label { font-size: 12px; color: #8892a4; }
+    .plan-progress-bar-bg { width: 120px; height: 6px; background: #2a2f45; border-radius: 3px; overflow: hidden; }
+    .plan-progress-bar { height: 100%; background: #c8883a; border-radius: 3px; transition: width 0.4s ease; width: 0%; }
+    .plan-progress-pct { font-size: 12px; color: #c8883a; font-weight: 500; }
+
+    .plan-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ── Section block ── */
+    .section-block { border: 1px solid #2a2f45; border-radius: 10px; overflow: hidden; }
+    .section-header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: #1a1e2a; border-bottom: 1px solid #2a2f45; cursor: pointer; user-select: none; }
+    .section-icon { width: 28px; height: 28px; border-radius: 6px; background: #c8883a22; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .section-icon i { font-size: 15px; color: #c8883a; }
+    .section-title { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #f0ede6; flex: 1; }
+    .section-badge { font-size: 11px; padding: 3px 9px; border-radius: 20px; background: #2a2f45; color: #8892a4; }
+    .section-badge.done { background: #1a3320; color: #639922; }
+    .section-chevron { font-size: 16px; color: #8892a4; transition: transform 0.2s; }
+    .section-block.collapsed .section-chevron { transform: rotate(-90deg); }
+    .section-block.collapsed .drills-list { display: none; }
+
+    .drills-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── Drill item ── */
+    .drill-item { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 8px; background: #0f1117; border: 1px solid #2a2f45; transition: border-color 0.2s, opacity 0.2s; cursor: pointer; }
+    .drill-item:hover { border-color: #3a3f55; }
+    .drill-item.completed { opacity: 0.5; border-color: #1a3320; background: #0d150f; }
+    .drill-checkbox { width: 22px; height: 22px; border-radius: 6px; border: 2px solid #2a2f45; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; transition: all 0.2s; background: transparent; }
+    .drill-item.completed .drill-checkbox { background: #639922; border-color: #639922; }
+    .drill-checkbox i { font-size: 13px; color: #fff; display: none; }
+    .drill-item.completed .drill-checkbox i { display: block; }
+    .drill-content { flex: 1; min-width: 0; }
+    .drill-name { font-size: 14px; font-weight: 500; color: #f0ede6; margin-bottom: 6px; }
+    .drill-item.completed .drill-name { text-decoration: line-through; color: #8892a4; }
+    .drill-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+    .drill-meta-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #8892a4; }
+    .drill-meta-item i { font-size: 13px; color: #c8883a; }
+    .drill-instructions { font-size: 12px; color: #6b7280; line-height: 1.6; border-top: 1px solid #2a2f45; padding-top: 8px; margin-top: 4px; }
+
+    /* ── Video embed ── */
+    .drill-video-wrap { margin-top: 10px; border-top: 1px solid #2a2f45; padding-top: 10px; }
+    .drill-video-label { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: #8892a4; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+    .drill-video-label i { font-size: 13px; color: #c8883a; }
+    .drill-video-frame { width: 100%; aspect-ratio: 16/9; border-radius: 6px; border: none; background: #0f1117; }
+    .drill-no-video { font-size: 12px; color: #4a5068; display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    .drill-no-video a { color: #c8883a; text-decoration: none; }
+    .drill-no-video a:hover { text-decoration: underline; }
+    .drill-item { cursor: default; }
+    .drill-checkbox-wrap { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="logo-area">
+      <div class="logo-label">🏀 Hoop IQ</div>
+      <div class="logo-sub">AI Training Platform</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Train</div>
+      <a class="nav-item active" href="#"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
+      <a class="nav-item" href="#generate"><i class="ti ti-bolt"></i>Generate plan</a>
+      <a class="nav-item" href="#"><i class="ti ti-history"></i>Past sessions</a>
+      <div class="nav-section">Develop</div>
+      <a class="nav-item" href="#"><i class="ti ti-chart-line"></i>Progress</a>
+      <a class="nav-item" href="#"><i class="ti ti-target"></i>Goals</a>
+      <a class="nav-item" href="#"><i class="ti ti-video"></i>Shot analysis</a>
+      <div class="nav-section">Account</div>
+      <a class="nav-item" href="#"><i class="ti ti-user"></i>Profile</a>
+      <a class="nav-item" href="#"><i class="ti ti-settings"></i>Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="nav-item" href="#"><i class="ti ti-help-circle"></i>Help & docs</a>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <div class="top-bar">
+      <div>
+        <div class="page-title">Dashboard</div>
+        <div class="page-sub" id="today-date">Loading...</div>
+      </div>
+      <button class="btn-primary" onclick="document.getElementById('generate').scrollIntoView({behavior:'smooth'})">
+        <i class="ti ti-bolt"></i>New session
+      </button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-accent"></div>
+        <div class="stat-label">Sessions</div>
+        <div class="stat-value">24</div>
+        <div class="stat-delta"><i class="ti ti-trending-up"></i>+3 this week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-accent"></div>
+        <div class="stat-label">Shots logged</div>
+        <div class="stat-value">1,840</div>
+        <div class="stat-delta"><i class="ti ti-trending-up"></i>+120 today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-accent"></div>
+        <div class="stat-label">Avg. session</div>
+        <div class="stat-value">52<span class="stat-unit">min</span></div>
+        <div class="stat-delta"><i class="ti ti-trending-up"></i>Up 8 min</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-accent"></div>
+        <div class="stat-label">Plans generated</div>
+        <div class="stat-value" id="plan-count">0</div>
+        <div class="stat-delta" style="color:#8892a4"><i class="ti ti-clock"></i><span id="last-plan-time">No plans yet</span></div>
+      </div>
+    </div>
+
+    <div class="middle-row">
+      <div class="card" id="generate">
+        <div class="card-title"><i class="ti ti-bolt"></i>Generate a practice plan</div>
+        <form method="POST" id="plan-form" onsubmit="handleSubmit()">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Position</label>
+              <input type="text" name="position" placeholder="e.g. Point Guard" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Time available</label>
+              <div class="time-input-wrap">
+                <input type="number" name="time" placeholder="e.g. 60" min="10" max="240" required>
+                <span class="time-suffix">min</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">Focus areas</label>
+            <textarea name="weaknesses" id="focus-input" placeholder="e.g. three-point shooting, ball handling under pressure..." required></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Skill level</label>
+              <select name="skill_level">
+                <option>Beginner</option>
+                <option>Intermediate</option>
+                <option selected>Advanced</option>
+                <option>Elite</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Equipment</label>
+              <select name="equipment">
+                <option>Full gym</option>
+                <option selected>Outdoor court</option>
+                <option>Driveway only</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="generate-btn" id="gen-btn">
+            <i class="ti ti-sparkles"></i>Generate my plan
+          </button>
+          <div class="loading-state" id="loading">
+            <div class="spinner"></div>
+            Generating your plan with AI...
+          </div>
+        </form>
+      </div>
+
+      <div class="card tips-card">
+        <div class="card-title"><i class="ti ti-bulb"></i>Training tips</div>
+        <div class="tip-item">
+          <div class="tip-icon"><i class="ti ti-repeat"></i></div>
+          <div>
+            <div class="tip-title">Muscle memory takes reps</div>
+            <div class="tip-text">Consistent form over 3–4 sessions before chasing volume. Quality reps build the pattern.</div>
+          </div>
+        </div>
+        <div class="tip-item">
+          <div class="tip-icon"><i class="ti ti-flame"></i></div>
+          <div>
+            <div class="tip-title">Simulate game pressure</div>
+            <div class="tip-text">Finish every session with 5 minutes of contested or fatigue shooting. That's where form breaks.</div>
+          </div>
+        </div>
+        <div class="tip-item">
+          <div class="tip-icon"><i class="ti ti-moon"></i></div>
+          <div>
+            <div class="tip-title">Recovery is training</div>
+            <div class="tip-text">Sleep and rest days are where adaptation happens. Don't skip them.</div>
+          </div>
+        </div>
+        <div class="tip-item">
+          <div class="tip-icon"><i class="ti ti-eye"></i></div>
+          <div>
+            <div class="tip-title">Be specific with focus areas</div>
+            <div class="tip-text">The more detail you give, the more targeted your generated plan will be.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="court-banner">
+      <svg class="court-svg" width="240" height="170" viewBox="0 0 240 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="238" height="168" rx="4" stroke="white" stroke-width="2"/>
+        <circle cx="120" cy="85" r="32" stroke="white" stroke-width="2"/>
+        <line x1="120" y1="1" x2="120" y2="169" stroke="white" stroke-width="1.5"/>
+        <rect x="1" y="48" width="65" height="74" stroke="white" stroke-width="1.5"/>
+        <rect x="174" y="48" width="65" height="74" stroke="white" stroke-width="1.5"/>
+        <path d="M66 48 Q98 85 66 122" stroke="white" stroke-width="1.5" fill="none"/>
+        <path d="M174 48 Q142 85 174 122" stroke="white" stroke-width="1.5" fill="none"/>
+      </svg>
+      <div class="banner-left">
+        <div class="banner-title">What do you want to work on today?</div>
+        <div class="banner-sub">Pick a focus and it'll populate in the form automatically.</div>
+        <div class="skill-pills">
+          <div class="pill active" onclick="setPill(this,'Shooting')">Shooting</div>
+          <div class="pill" onclick="setPill(this,'Ball handling')">Ball handling</div>
+          <div class="pill" onclick="setPill(this,'Defense')">Defense</div>
+          <div class="pill" onclick="setPill(this,'Footwork')">Footwork</div>
+          <div class="pill" onclick="setPill(this,'Conditioning')">Conditioning</div>
+          <div class="pill" onclick="setPill(this,'Post moves')">Post moves</div>
+        </div>
+      </div>
+    </div>
+
+    {% if plan %}
+    <div class="plan-card" id="plan-output">
+      <div class="plan-header">
+        <div class="plan-header-left">
+          <div class="plan-header-icon"><i class="ti ti-sparkles"></i></div>
+          <div>
+            <div class="plan-title">Your Practice Plan</div>
+            <div class="plan-meta" id="plan-meta-text">Generated just now · Check off drills as you go</div>
+          </div>
+        </div>
+        <div class="plan-progress-wrap">
+          <div class="plan-progress-label">Progress</div>
+          <div class="plan-progress-bar-bg"><div class="plan-progress-bar" id="progress-bar"></div></div>
+          <div class="plan-progress-pct" id="progress-pct">0%</div>
+        </div>
+      </div>
+      <div class="plan-body" id="plan-body">
+        <!-- rendered by JS from raw plan -->
+      </div>
+    </div>
+
+    <script>
+      const RAW_PLAN = {{ plan | tojson }};
+      const DRILL_LIBRARY = {{ drill_library | safe }};
+    </script>
+    {% endif %}
+
+  </main>
+
+  <script>
+    /* ── Drill library fallback ── */
+    if (typeof DRILL_LIBRARY === 'undefined') { var DRILL_LIBRARY = {}; }
+    /* ── Date ── */
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const now = new Date();
+    document.getElementById('today-date').textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()} · Ready to work?`;
+
+    /* ── Plan count ── */
+    let planCount = parseInt(localStorage.getItem('planCount') || '0');
+    document.getElementById('plan-count').textContent = planCount;
+    const lastTime = localStorage.getItem('lastPlanTime');
+    if (lastTime) document.getElementById('last-plan-time').textContent = 'Last: ' + lastTime;
+
+    /* ── Pills ── */
+    function setPill(el, focus) {
+      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('focus-input').value = focus;
+      document.getElementById('generate').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    /* ── Form submit ── */
+    function handleSubmit() {
+      document.getElementById('gen-btn').style.display = 'none';
+      document.getElementById('loading').style.display = 'flex';
+      planCount++;
+      localStorage.setItem('planCount', planCount);
+      const t = new Date();
+      localStorage.setItem('lastPlanTime', `${months[t.getMonth()]} ${t.getDate()}`);
+    }
+
+    /* ── Section icons map ── */
+    const sectionIcons = {
+      'warm': 'ti-flame',
+      'cool': 'ti-snowflake',
+      'shoot': 'ti-circle-dot',
+      'skill': 'ti-star',
+      'drill': 'ti-repeat',
+      'condition': 'ti-heartbeat',
+      'defense': 'ti-shield',
+      'ball': 'ti-circle',
+      'foot': 'ti-run',
+      'post': 'ti-user',
+      'default': 'ti-bolt'
+    };
+
+    function getSectionIcon(title) {
+      const t = title.toLowerCase();
+      for (const [key, icon] of Object.entries(sectionIcons)) {
+        if (t.includes(key)) return icon;
+      }
+      return sectionIcons.default;
+    }
+
+    /* ── Parse Claude's markdown output into structured sections ── */
+    function parsePlan(raw) {
+      const sections = [];
+      const sectionRegex = /^## (.+)$/gm;
+      const drillRegex = /^### (.+)$/gm;
+
+      const sectionMatches = [...raw.matchAll(sectionRegex)];
+      if (sectionMatches.length === 0) return null;
+
+      sectionMatches.forEach((sMatch, si) => {
+        const sectionTitle = sMatch[1].trim();
+        const sectionStart = sMatch.index + sMatch[0].length;
+        const sectionEnd = si + 1 < sectionMatches.length ? sectionMatches[si + 1].index : raw.length;
+        const sectionText = raw.slice(sectionStart, sectionEnd);
+
+        const drillMatches = [...sectionText.matchAll(drillRegex)];
+        const drills = [];
+
+        drillMatches.forEach((dMatch, di) => {
+          const drillName = dMatch[1].trim();
+          const drillStart = dMatch.index + dMatch[0].length;
+          const drillEnd = di + 1 < drillMatches.length ? drillMatches[di + 1].index : sectionText.length;
+          const drillText = sectionText.slice(drillStart, drillEnd).trim();
+
+          const duration = (drillText.match(/\*\*Duration:\*\*\s*(.+)/i) || [])[1] || '';
+          const reps = (drillText.match(/\*\*Reps\/Sets:\*\*\s*(.+)/i) || [])[1] || '';
+          const instructions = (drillText.match(/\*\*Instructions:\*\*\s*([\s\S]+?)(?=\*\*|$)/i) || [])[1] || '';
+
+          drills.push({
+            name: drillName,
+            duration: duration.trim(),
+            reps: reps.trim(),
+            instructions: instructions.trim()
+          });
+        });
+
+        if (drills.length === 0) {
+          const lines = sectionText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+          if (lines.length > 0) {
+            drills.push({ name: 'Overview', duration: '', reps: '', instructions: lines.join(' ') });
+          }
+        }
+
+        sections.push({ title: sectionTitle, drills });
+      });
+
+      return sections;
+    }
+
+    /* ── Progress tracking ── */
+    let totalDrills = 0;
+    let completedDrills = 0;
+
+    function updateProgress() {
+      const pct = totalDrills === 0 ? 0 : Math.round((completedDrills / totalDrills) * 100);
+      document.getElementById('progress-bar').style.width = pct + '%';
+      document.getElementById('progress-pct').textContent = pct + '%';
+      if (pct === 100) {
+        document.getElementById('plan-meta-text').textContent = '🏆 Session complete! Great work.';
+      }
+    }
+
+    function toggleDrill(checkbox, item) {
+      const wasCompleted = item.classList.contains('completed');
+      item.classList.toggle('completed');
+      completedDrills += wasCompleted ? -1 : 1;
+
+      const section = item.closest('.section-block');
+      const allDrills = section.querySelectorAll('.drill-item');
+      const doneDrills = section.querySelectorAll('.drill-item.completed');
+      const badge = section.querySelector('.section-badge');
+      if (badge) {
+        badge.textContent = `${doneDrills.length}/${allDrills.length}`;
+        badge.classList.toggle('done', doneDrills.length === allDrills.length);
+      }
+      updateProgress();
+    }
+
+    function toggleSection(header) {
+      header.closest('.section-block').classList.toggle('collapsed');
+    }
+
+    function getDrillVideo(drillName) {
+      if (!DRILL_LIBRARY) return null;
+      return DRILL_LIBRARY[drillName] || null;
+    }
+
+    function buildVideoEmbed(drillName) {
+      const info = getDrillVideo(drillName);
+      if (info && info.video_id) {
+        const src = `https://www.youtube.com/embed/${info.video_id}?start=${info.start}&rel=0&modestbranding=1`;
+        return `
+          <div class="drill-video-wrap">
+            <div class="drill-video-label"><i class="ti ti-brand-youtube"></i>Watch the drill</div>
+            <iframe class="drill-video-frame" src="${src}" allowfullscreen loading="lazy"></iframe>
+          </div>`;
+      }
+      const searchQuery = encodeURIComponent(`basketball ${drillName} drill`);
+      return `
+        <div class="drill-no-video">
+          <i class="ti ti-search" style="color:#8892a4;font-size:13px"></i>
+          No video mapped — <a href="https://www.youtube.com/results?search_query=${searchQuery}" target="_blank">search YouTube</a>
+        </div>`;
+    }
+
+    /* ── Render plan ── */
+    if (typeof RAW_PLAN !== 'undefined') {
+      const sections = parsePlan(RAW_PLAN);
+      const body = document.getElementById('plan-body');
+
+      if (!sections || sections.length === 0) {
+        body.innerHTML = `<div style="color:#c8c4bc;font-size:14px;line-height:1.8;white-space:pre-wrap">${RAW_PLAN}</div>`;
+      } else {
+        sections.forEach((section, si) => {
+          const icon = getSectionIcon(section.title);
+          totalDrills += section.drills.length;
+
+          const block = document.createElement('div');
+          block.className = 'section-block';
+
+          const drillsHTML = section.drills.map(drill => {
+            const videoHTML = buildVideoEmbed(drill.name);
+            return `
+              <div class="drill-item">
+                <div class="drill-checkbox-wrap" onclick="toggleDrill(this, this.closest('.drill-item'))">
+                  <div class="drill-checkbox"><i class="ti ti-check"></i></div>
+                </div>
+                <div class="drill-content">
+                  <div class="drill-name">${drill.name}</div>
+                  <div class="drill-meta">
+                    ${drill.duration ? `<div class="drill-meta-item"><i class="ti ti-clock"></i>${drill.duration}</div>` : ''}
+                    ${drill.reps ? `<div class="drill-meta-item"><i class="ti ti-repeat"></i>${drill.reps}</div>` : ''}
+                  </div>
+                  ${drill.instructions ? `<div class="drill-instructions">${drill.instructions}</div>` : ''}
+                  ${videoHTML}
+                </div>
+              </div>`;
+          }).join('');
+
+          block.innerHTML = `
+            <div class="section-header" onclick="toggleSection(this)">
+              <div class="section-icon"><i class="ti ${icon}"></i></div>
+              <div class="section-title">${section.title}</div>
+              <div class="section-badge">0/${section.drills.length}</div>
+              <i class="ti ti-chevron-down section-chevron"></i>
+            </div>
+            <div class="drills-list">${drillsHTML}</div>
+          `;
+          body.appendChild(block);
+        });
+
+        updateProgress();
+        document.getElementById('plan-output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      planCount = parseInt(localStorage.getItem('planCount') || '0');
+      document.getElementById('plan-count').textContent = planCount;
+      const storedTime = localStorage.getItem('lastPlanTime');
+      if (storedTime) document.getElementById('last-plan-time').textContent = 'Last: ' + storedTime;
+    }
+  </script>
+
+</body>
+</html>
