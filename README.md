@@ -74,7 +74,7 @@ Visit `http://localhost:5000`
 
 ## Deployment
 
-Deployed on AWS EC2 (Ubuntu 24.04, t2.micro) with:
+Deployed on AWS EC2 (Ubuntu 24.04, t3.micro) with:
 - Nginx as reverse proxy
 - Gunicorn as WSGI server
 - Let's Encrypt SSL certificate
