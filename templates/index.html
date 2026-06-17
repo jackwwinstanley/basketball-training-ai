@@ -1536,15 +1536,21 @@
     /* ══════════════════════════════════════════════════════
        DRILL LIBRARY (subset — full version in app.py)
     ══════════════════════════════════════════════════════ */
-    var DRILL_LIBRARY = {};
+    var DRILL_LIBRARY = {};  // populated by /api/drills fetch below; maps drill name -> {video_id, start, category, level}
 
     /* ══════════════════════════════════════════════════════
        GLOBAL STATE
     ══════════════════════════════════════════════════════ */
-    var statsData = null;
-    var calViewDate = new Date();
+    var statsData = null;       // cached response from /api/stats, reused by Plans Log + Calendar tabs
+    var calViewDate = new Date(); // which month the Calendar tab is currently showing
 
-    /* ── Load drill library first, then render plan if needed ── */
+    /* ── Load drill library first, then render plan if needed ──
+       This ordering matters: if a plan was just generated (server passed it
+       via _INJECTED_PLAN below), we must NOT call buildPlanCard() until
+       DRILL_LIBRARY is populated, or every drill would render with the
+       "no video found" fallback link instead of its embedded YouTube clip.
+       This was the fix for a race condition where the page rendered before
+       the fetch resolved. */
     fetch('/api/drills')
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -1571,6 +1577,9 @@
 
     /* ══════════════════════════════════════════════════════
        SIDEBAR TOGGLE (mobile)
+       Desktop sidebar is always visible; on mobile it's hidden off-screen
+       (see .sidebar transform in CSS) and slid in via the .open class,
+       with a dark overlay behind it that closes it again on tap.
     ══════════════════════════════════════════════════════ */
     function toggleSidebar() {
       document.querySelector('.sidebar').classList.toggle('open');
@@ -1583,6 +1592,9 @@
 
     /* ══════════════════════════════════════════════════════
        TAB SYSTEM
+       Three tabs (Dashboard / Plans Log / Calendar) implemented as plain
+       show/hide rather than separate pages — keeps everything in one
+       template and avoids extra server round trips when switching tabs.
     ══════════════════════════════════════════════════════ */
     function showTab(name, el) {
       document.querySelectorAll('.tab-content').forEach(function (t) { t.classList.remove('active'); });
@@ -1590,9 +1602,12 @@
       document.querySelectorAll('.mobile-nav-btn').forEach(function (n) { n.classList.remove('active'); });
       document.getElementById('tab-' + name).classList.add('active');
       if (el) el.classList.add('active');
-      // Sync mobile bottom nav
+      // Sync mobile bottom nav so desktop sidebar and mobile nav never disagree on the active tab
       var mobBtn = document.getElementById('mob-' + name);
       if (mobBtn) mobBtn.classList.add('active');
+      // Plans Log and Calendar are rebuilt from statsData each time they're opened,
+      // rather than kept in sync continuously, since they're cheap to rebuild and
+      // this guarantees they always reflect the latest plan/session data.
       if (name === 'plans') renderPlansLog();
       if (name === 'calendar') renderCalendar();
       // Scroll to top on tab change
@@ -1639,6 +1654,16 @@
     /* ══════════════════════════════════════════════════════
        PERSISTENT CHECKBOX STATE
        Key: "plan_<planId>_<drillName>"
+
+       Each drill's completed/not-completed state is stored in localStorage
+       rather than the database, keyed by plan ID + drill name. This means:
+       - checking a drill off survives page refresh and re-visits
+       - the SAME checked state shows up later in the Plans Log tab, since
+         buildPlanCard() re-reads these keys whenever a plan (new or historical)
+         is rendered
+       - no extra database writes/endpoints were needed for something this simple
+       Tradeoff: this state is per-browser, not per-account — it won't follow
+       the user to a different device. Acceptable for a single-user training app.
     ══════════════════════════════════════════════════════ */
     function getDrillKey(planId, drillName) {
       return 'plan_' + planId + '_' + drillName.replace(/\s+/g, '_');
@@ -1652,12 +1677,19 @@
       if (done) {
         localStorage.setItem(getDrillKey(planId, drillName), '1');
       } else {
-        localStorage.removeItem(getDrillKey(planId, drillName));
+        localStorage.removeItem(getDrillKey(planId, drillName)); // unchecking just deletes the key
       }
     }
 
     /* ══════════════════════════════════════════════════════
        PLAN PARSER
+       Converts Claude's markdown-style plan text into structured data the
+       rest of the app can render as cards. Relies entirely on the strict
+       format enforced in the app.py prompt: "## Section" headers and
+       "### Drill Name" sub-headers with Duration / Reps-Sets / Instructions
+       bold-label lines underneath. If Claude ever drifts from this format,
+       parsePlan() falls back to returning null and the caller just shows
+       the raw text instead of crashing.
     ══════════════════════════════════════════════════════ */
     function parsePlan(raw) {
       var sections = [];
@@ -1711,6 +1743,12 @@
 
     /* ══════════════════════════════════════════════════════
        VIDEO EMBED
+       Looks up the exact (video_id, start_seconds) pair from DRILL_LIBRARY
+       for a given drill name and builds a YouTube iframe that opens already
+       cued to the right moment. If the name isn't in the library — usually
+       because Claude's fuzzy-match correction on the backend wasn't confident
+       enough to substitute it — falls back to a "search YouTube" link instead
+       of silently showing a broken embed.
     ══════════════════════════════════════════════════════ */
     function videoHTML(drillName) {
       var info = DRILL_LIBRARY[drillName];
@@ -1728,7 +1766,14 @@
 
     /* ══════════════════════════════════════════════════════
        BUILD PLAN CARD HTML
-       planId is used for persistent checkbox keys
+       Renders one full plan (sections + drills + videos + checkboxes) as an
+       HTML string. Used in two places: once for a freshly generated plan on
+       the Dashboard tab, and again for every historical plan in the Plans Log
+       tab — same function, same markup, so a plan looks identical whether
+       it's brand new or from last week.
+       planId is baked into every checkbox/section id so toggleDrill() and
+       localStorage lookups stay scoped to the correct plan even when multiple
+       plan cards exist on the page at once (e.g. in the Plans Log).
     ══════════════════════════════════════════════════════ */
     function buildPlanCard(raw, planId, meta) {
       var sections = parsePlan(raw);
@@ -1877,9 +1922,16 @@
 
     /* ══════════════════════════════════════════════════════
        CALENDAR
+       Builds a standard month grid (empty cells for padding before the 1st,
+       then one cell per day) and highlights any date present in
+       statsData.login_dates. Dates are compared as "YYYY-MM-DD" strings
+       rather than Date objects to avoid timezone drift between what the
+       server recorded and what the browser renders.
     ══════════════════════════════════════════════════════ */
     function renderCalendar() {
       function doRender() {
+        // statsData loads asynchronously via loadStats(); if the Calendar tab
+        // is opened before that resolves, retry shortly instead of rendering empty.
         if (!statsData) { setTimeout(doRender, 300); return; }
         var trainedSet = new Set(statsData.login_dates);
         var today = new Date();
@@ -1888,7 +1940,7 @@
 
         document.getElementById('cal-month-label').textContent = MONTHS[month] + ' ' + year;
 
-        var firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+        var firstDay = new Date(year, month, 1).getDay(); // 0=Sun — how many empty cells to pad before day 1
         var daysInMonth = new Date(year, month + 1, 0).getDate();
         var todayStr = today.toISOString().split('T')[0];
 

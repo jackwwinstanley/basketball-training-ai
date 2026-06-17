@@ -1,3 +1,14 @@
+"""
+NoDaysOff — AI Basketball Training Platform
+Backend: Flask + SQLAlchemy (SQLite) + Flask-Login + Authlib (Google OAuth) + Anthropic Claude API
+
+Required environment variables:
+    FLASK_SECRET_KEY      — used to sign session cookies
+    GOOGLE_CLIENT_ID       — from Google Cloud Console OAuth credentials
+    GOOGLE_CLIENT_SECRET   — from Google Cloud Console OAuth credentials
+    ANTHROPIC_API_KEY      — Claude API key for plan generation
+"""
+
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -13,22 +24,25 @@ app = Flask(__name__)
 # ── Config ────────────────────────────────────────────────────────────────────
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-production")
 
-# Database — SQLite locally, swap to MySQL on AWS:
+# Database — SQLite is fine for low-traffic single-server deployment.
+# Swap to RDS MySQL only if this ever needs to scale beyond one EC2 instance:
 # app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://user:pass@rds-endpoint/NoDaysOff"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///NoDaysOff.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Google OAuth
+# Google OAuth credentials (set as env vars, never hardcoded)
 app.config["GOOGLE_CLIENT_ID"] = os.environ.get("GOOGLE_CLIENT_ID")
 app.config["GOOGLE_CLIENT_SECRET"] = os.environ.get("GOOGLE_CLIENT_SECRET")
 
 # ── Extensions ────────────────────────────────────────────────────────────────
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
-login_manager.login_view = "login_page"
+login_manager.login_view = "login_page"  # redirect target for @login_required when not logged in
 oauth = OAuth(app)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
+# Registers Google as an OAuth provider using its standard discovery document,
+# which tells Authlib the correct auth/token endpoints automatically.
 google = oauth.register(
     name="google",
     client_id=app.config["GOOGLE_CLIENT_ID"],
@@ -39,6 +53,7 @@ google = oauth.register(
 
 # ── Models ────────────────────────────────────────────────────────────────────
 class User(UserMixin, db.Model):
+    """A signed-in user, identified by their Google account."""
     __tablename__ = "users"
     id            = db.Column(db.Integer, primary_key=True)
     google_id     = db.Column(db.String(128), unique=True, nullable=False)
@@ -50,6 +65,12 @@ class User(UserMixin, db.Model):
     plans         = db.relationship("Plan", backref="user", lazy=True)
 
 class UserSession(db.Model):
+    """
+    One row per login. Created at login with logout_at left null,
+    then filled in (along with duration_min) when the user logs out.
+    This lets the dashboard show "sessions this week" and "avg session length"
+    without needing a separate analytics service.
+    """
     __tablename__ = "user_sessions"
     id           = db.Column(db.Integer, primary_key=True)
     user_id      = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -58,6 +79,8 @@ class UserSession(db.Model):
     duration_min = db.Column(db.Float, nullable=True)
 
 class Plan(db.Model):
+    """A single AI-generated practice plan, stored in full so it can be
+    re-rendered later in the Plans Log tab exactly as it first appeared."""
     __tablename__ = "plans"
     id           = db.Column(db.Integer, primary_key=True)
     user_id      = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -67,13 +90,18 @@ class Plan(db.Model):
     time_avail   = db.Column(db.String(32))
     skill_level  = db.Column(db.String(64))
     equipment    = db.Column(db.String(128))
-    plan_text    = db.Column(db.Text)
+    plan_text    = db.Column(db.Text)  # raw markdown from Claude, parsed client-side by parsePlan()
 
 @login_manager.user_loader
 def load_user(user_id):
+    """Tells Flask-Login how to reload a user object from the session cookie's user_id."""
     return db.session.get(User, int(user_id))
 
 # ── Complete Drill Library ─────────────────────────────────────────────────────
+# Maps every drill name Claude is allowed to use to its YouTube video_id and
+# start timestamp (in seconds), plus category/level for organizing the prompt.
+# Claude is instructed to only output names from this dict; fuzzy_match_drill()
+# below corrects any names it slightly mis-renders so the video embed still works.
 DRILL_LIBRARY = {
     # Ball Handling - Beginner
     "Pound Dribble": {"video_id": "CLoWxOvlHkk", "start": 90, "category": "Ball Handling", "level": "Beginner"},
@@ -198,6 +226,8 @@ DRILL_LIBRARY = {
 }
 
 def get_drill_names_for_prompt():
+    """Group drill names by 'Category - Level' so the Claude prompt can be
+    organized into readable sections rather than one flat list of 200+ names."""
     organized = {}
     for name, info in DRILL_LIBRARY.items():
         key = f"{info['category']} - {info['level']}"
@@ -210,9 +240,19 @@ def get_drill_names_for_prompt():
     return result
 
 def fuzzy_match_drill(name):
-    """Return the closest drill name from DRILL_LIBRARY, or original if close enough."""
+    """
+    Claude occasionally renames or slightly rewords a drill (e.g. drops a word,
+    pluralizes, or merges two names) even when told to copy them exactly.
+    Since the frontend looks up videos by exact name match against DRILL_LIBRARY,
+    any drift would silently break the video embed for that drill.
+
+    This scores every library name by word overlap with what Claude returned and
+    substitutes the closest match if the overlap is confident enough (>=0.5).
+    If nothing scores high enough, the original text is kept as-is rather than
+    risk swapping in a wrong drill.
+    """
     if name in DRILL_LIBRARY:
-        return name
+        return name  # exact match — nothing to fix
     # Normalize for comparison
     name_lower = name.lower().strip()
     best_match = None
@@ -226,19 +266,21 @@ def fuzzy_match_drill(name):
             continue
         overlap = len(name_words & lib_words)
         score = overlap / max(len(name_words), len(lib_words))
-        # Bonus if one contains the other
+        # Bonus if one name is a substring of the other (catches truncations/extensions)
         if name_lower in lib_lower or lib_lower in name_lower:
             score += 0.3
         if score > best_score:
             best_score = score
             best_match = lib_name
-    # Only substitute if reasonably confident
+    # Only substitute if reasonably confident — avoids swapping in an unrelated drill
     if best_score >= 0.5 and best_match:
         return best_match
-    return name  # return original if no good match
+    return name  # no good match found; leave as-is (frontend will show "search YouTube" link)
 
 def fix_drill_names_in_plan(plan_text):
-    """Replace unrecognized drill names in ### headers with closest library match."""
+    """Post-process Claude's full plan text, correcting every '### Drill Name'
+    header in place using fuzzy_match_drill(). Runs once per generated plan
+    right before saving to the database, so corrections persist in the log too."""
     import re
     def replace_drill(match):
         original = match.group(1).strip()
@@ -255,11 +297,18 @@ def login_page():
 
 @app.route("/auth/google")
 def auth_google():
+    """Kicks off the OAuth flow — sends the user to Google's login page."""
     redirect_uri = url_for("auth_callback", _external=True)
     return google.authorize_redirect(redirect_uri)
 
 @app.route("/auth/callback")
 def auth_callback():
+    """
+    Google redirects here after the user approves login, with a code that
+    Authlib exchanges for an access token + user profile (userinfo).
+    First-time visitors get a new User row; returning users are matched by
+    their stable Google account id (google_id), not email, since email can change.
+    """
     token = google.authorize_access_token()
     user_info = token.get("userinfo")
 
@@ -274,11 +323,12 @@ def auth_callback():
         db.session.add(user)
         db.session.commit()
 
-    # Start a new session record
+    # Start a new UserSession row now; it stays open (logout_at = None) until
+    # the user actually logs out, at which point duration is calculated.
     new_session = UserSession(user_id=user.id)
     db.session.add(new_session)
     db.session.commit()
-    session["session_id"] = new_session.id
+    session["session_id"] = new_session.id  # remembered in the cookie so /logout can find it
 
     login_user(user)
     return redirect(url_for("index"))
@@ -286,7 +336,9 @@ def auth_callback():
 @app.route("/logout")
 @login_required
 def logout():
-    # Close the session record with duration
+    # Close out the session record opened in auth_callback and compute how
+    # long the user was actually logged in — this is what powers the
+    # "avg session length" stat on the dashboard.
     sess_id = session.get("session_id")
     if sess_id:
         user_sess = db.session.get(UserSession, sess_id)
@@ -299,6 +351,10 @@ def logout():
     return redirect(url_for("login_page"))
 
 # ── Drill library endpoint ────────────────────────────────────────────────────
+# Separate from /api/stats so the frontend can load DRILL_LIBRARY immediately
+# on page load without waiting on the (slightly heavier) stats query first —
+# this fixed a race condition where a freshly generated plan rendered before
+# the video lookup data had arrived, showing "no video" for every drill.
 @app.route("/api/drills")
 def api_drills():
     return jsonify(DRILL_LIBRARY)
@@ -307,18 +363,26 @@ def api_drills():
 @app.route("/api/stats")
 @login_required
 def api_stats():
+    """
+    Single endpoint that powers the entire Dashboard tab, Plans Log tab, and
+    Calendar tab — all three are derived from the same UserSession/Plan rows
+    rather than separate queries, since the data overlaps heavily.
+    """
     user_id = current_user.id
     now = datetime.utcnow()
     week_ago = now - timedelta(days=7)
 
     all_sessions = UserSession.query.filter_by(user_id=user_id).all()
     week_sessions = [s for s in all_sessions if s.login_at >= week_ago]
+    # avg_session_min only counts sessions that have actually been closed out
+    # (duration_min set on logout) — an in-progress session shouldn't skew the average
     completed = [s for s in all_sessions if s.duration_min is not None]
     avg_min = round(sum(s.duration_min for s in completed) / len(completed), 1) if completed else 0
 
     all_plans = Plan.query.filter_by(user_id=user_id).order_by(Plan.created_at.desc()).all()
 
-    # Calendar — all login dates
+    # Calendar tab needs unique login dates (not full timestamps) so multiple
+    # logins on the same day still only light up one square
     login_dates = list(set(s.login_at.strftime("%Y-%m-%d") for s in all_sessions))
 
     plans_data = [{
@@ -328,7 +392,7 @@ def api_stats():
         "weaknesses": p.weaknesses,
         "time": p.time_avail,
         "skill_level": p.skill_level,
-        "plan_text": p.plan_text,
+        "plan_text": p.plan_text,  # full markdown — re-parsed client-side in the Plans Log tab
     } for p in all_plans]
 
     return jsonify({
@@ -356,26 +420,39 @@ def index():
         skill_level  = request.form.get("skill_level", "Intermediate")
         equipment    = request.form.get("equipment", "Full gym")
 
-        drill_list = get_drill_names_for_prompt()
+        drill_list = get_drill_names_for_prompt()  # currently unused below but kept for an
+                                                     # earlier category-grouped prompt variant
 
-        # Build a flat list of valid drill names for the prompt
+        # Claude is given the full flat list of valid drill names and told to copy
+        # them exactly. This (plus fix_drill_names_in_plan() afterward) is what
+        # keeps every drill in a generated plan mapped to a real YouTube timestamp
+        # instead of Claude inventing plausible-sounding drill names.
         valid_drills = list(DRILL_LIBRARY.keys())
         valid_drills_str = "\n".join("- " + d for d in valid_drills)
 
         message = client.messages.create(
             model="claude-haiku-4-5",
             max_tokens=2048,
-            messages=[{"role": "user", "content": f"""Create a basketball practice plan for a {skill_level} {position} who wants to improve {weaknesses} and has {time_avail} minutes available. They have access to: {equipment}.
+            messages=[{"role": "user", "content": f"""
+Create a basketball practice plan for a {skill_level} {position} who wants to improve {weaknesses} 
+and has {time_avail} minutes available. They have access to: {equipment}.
 
-CRITICAL RULE: You MUST use ONLY the drill names listed below, copied EXACTLY character for character. Do not rename, shorten, combine, or invent any drills. If a drill name does not appear in this list, do not use it.
+<important>
+CRITICAL RULE: You MUST use ONLY the drill names listed below, copied EXACTLY character for character. 
+Do not rename, shorten, combine, or invent any drills. If a drill name does not appear in this list, 
+do not use it.
+</important>
 
-VALID DRILL NAMES (copy exactly):
+<VALID_DRILL_NAMES>
+(copy exactly):
 {valid_drills_str}
+</VALID_DRILL_NAMES>
 
 Choose drills appropriate for {skill_level} skill level that target {weaknesses}.
 
 Format your response EXACTLY like this — do not deviate from this structure:
 
+<format>
 ## Warm-Up (10 min)
 
 ### Pound Dribble
@@ -396,28 +473,39 @@ Format your response EXACTLY like this — do not deviate from this structure:
 **Duration:** 5 minutes
 **Reps/Sets:** 2 sets of 10 each side
 **Instructions:** Deep lunge position, feel the stretch in hamstrings and groin.
+</format>
 
 Rules:
+<rules>
 - Only use drill names from the VALID DRILL NAMES list above, spelled exactly as shown
 - Include 2-4 drills per section
 - Fill exactly {time_avail} minutes total across all sections
-- Do not add any drills not in the list"""}]
+- Do not add any drills not in the list
+</rules>
+"""}]
         )
         plan = message.content[0].text
-        # Log what Claude returned for debugging
+
+        # ── Debug logging (kept on purpose) ──────────────────────────────────
+        # Logs every drill name Claude returned, before and after correction,
+        # with whether each one matched the library. Useful for sanity-checking
+        # in production via `journalctl -u nodaysoff -f` if videos ever stop
+        # showing up — shows immediately whether Claude or the matcher is at fault.
         import re
         drill_headers = re.findall(r'^### (.+)$', plan, flags=re.MULTILINE)
         for dh in drill_headers:
             in_lib = dh.strip() in DRILL_LIBRARY
             app.logger.warning(f"DRILL: '{dh.strip()}' | IN_LIBRARY: {in_lib}")
+
         plan = fix_drill_names_in_plan(plan)
-        # Log after fixing
+
         drill_headers_fixed = re.findall(r'^### (.+)$', plan, flags=re.MULTILINE)
         for dh in drill_headers_fixed:
             in_lib = dh.strip() in DRILL_LIBRARY
             app.logger.warning(f"FIXED: '{dh.strip()}' | IN_LIBRARY: {in_lib}")
 
-        # Save plan to database
+        # Save the corrected plan (not the raw Claude output) so the Plans Log
+        # always replays exactly what the user saw, videos included.
         new_plan = Plan(
             user_id=current_user.id,
             position=position,
@@ -436,6 +524,9 @@ Rules:
             "date": new_plan.created_at.strftime("%b %d, %Y · %I:%M %p"),
         }
 
+    # On GET this just renders the dashboard shell; on POST it also passes the
+    # freshly generated plan so index.html can render it immediately without
+    # waiting for a second round trip.
     return render_template(
         "index.html",
         plan=plan,
@@ -445,6 +536,8 @@ Rules:
     )
 
 # ── Init DB ───────────────────────────────────────────────────────────────────
+# Creates NoDaysOff.db and all tables on first run if they don't already exist;
+# safe to leave in on every startup since create_all() no-ops on existing tables.
 with app.app_context():
     db.create_all()
 
